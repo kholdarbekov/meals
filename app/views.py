@@ -6,9 +6,10 @@ from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.response import Response
 
-from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSerializer, MealListSerializer, \
-    MealCreateSerializer, MealUpdateSerializer
-from .models import User, Meal
+from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSerializer, \
+    MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
+    FavoriteMealCreateSerializer, FavoriteMealListSerializer
+from .models import User, Meal, FavouriteMeal
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 
@@ -171,3 +172,80 @@ class MealDeleteView(generics.DestroyAPIView):
             raise exc
 
         return meal
+
+
+class FavouriteMealCreateView(generics.CreateAPIView):
+    serializer_class = FavoriteMealCreateSerializer
+    permission_classes = [IsAuthenticated, ]
+
+    def create(self, request, *args, **kwargs):
+        error_message = list()
+        meal = None
+        user = None
+        try:
+            username = request.data['user']
+            user = User.objects.get(username=username)
+        except ObjectDoesNotExist as exc:
+            error_message.append('User Not found')
+
+        try:
+            meal_id = request.data['meal']
+            meal = Meal.objects.get(id=meal_id)
+        except ObjectDoesNotExist as exc:
+            error_message.append('Meal Not found')
+
+        if user.favourites:
+            if user.favourites.filter(meal=meal):
+                error_message.append('Meal is already in favourite list of this user')
+
+        if error_message:
+            exc = exceptions.APIException(*error_message)
+            exc.status_code = status.HTTP_400_BAD_REQUEST
+            raise exc
+
+        try:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+            headers = self.get_success_headers(serializer.data)
+            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        except Exception as e:
+            return Response(data=e.args, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FavouriteMealDeleteView(generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, ]
+
+    def get_object(self):
+        error_message = list()
+        favourite = None
+        try:
+            meal_id = self.request.data['meal_id']
+            favourite = FavouriteMeal.objects.filter(user=self.request.user, meal_id=meal_id)
+            if not favourite:
+                error_message.append('Meal not found in favourite list')
+        except KeyError:
+            error_message.append('parameter id is not sent')
+        except Exception as e:
+            error_message.extend(e.args)
+
+        if error_message:
+            exc = exceptions.APIException(*error_message)
+            exc.status_code = status.HTTP_400_BAD_REQUEST
+            raise exc
+
+        return favourite
+
+
+class FavouriteMealListView(generics.ListAPIView):
+    serializer_class = FavoriteMealListSerializer
+    permission_classes = [IsAuthenticated, ]
+
+    def get_queryset(self):
+        favourites = None
+        if self.request.user.role == User.REGULAR_USER:
+            if self.request.user.favourites:
+                favourites = self.request.user.favourites.all()
+        elif self.request.user.role == User.ADMIN:
+            favourites = FavouriteMeal.objects.all()
+        return favourites

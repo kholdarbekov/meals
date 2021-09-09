@@ -6,7 +6,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
 
-from .models import User, Meal
+from .models import User, Meal, FavouriteMeal
 
 from .utils import get_calories_from_api, get_country
 
@@ -176,3 +176,30 @@ class MealUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Meal
         fields = ['id', 'title', 'type', 'calories', 'public', 'owner']
+
+
+class FavoriteMealCreateSerializer(serializers.ModelSerializer):
+    user = serializers.SlugRelatedField(queryset=User.objects.all(), slug_field='username')
+    meal = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
+
+    def validate(self, attrs):
+        user = attrs.get('user')
+        meal = attrs.get('meal')
+        if meal in (f.meal for f in user.favourites.all()):
+            msg = _('Meal is already in favourite list of this user')
+            raise serializers.ValidationError(msg, code='validation')
+        return attrs
+
+    class Meta:
+        model = FavouriteMeal
+        fields = ['id', 'user', 'meal']
+
+
+class FavoriteMealListSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
+    user = serializers.StringRelatedField(many=False, read_only=True)
+    meal = serializers.StringRelatedField(many=False, read_only=True)
+
+    class Meta:
+        model = FavouriteMeal
+        fields = ['id', 'user', 'meal']

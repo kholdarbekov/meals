@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import UsersListView, UserLoginView, UserRegisterView, UserUpdateView, UserDeleteView, \
-    MealListView, MealCreateView, MealUpdateView, MealDeleteView
+    MealListView, MealCreateView, MealUpdateView, MealDeleteView, \
+    FavouriteMealCreateView, FavouriteMealDeleteView, FavouriteMealListView
 
 urlpatterns = [
     path('user/login', UserLoginView.as_view(), name='user_login'),
@@ -13,4 +14,8 @@ urlpatterns = [
     path('meal/create', MealCreateView.as_view(), name='meal_create'),
     path('meal/update', MealUpdateView.as_view(), name='meal_update'),
     path('meal/delete', MealDeleteView.as_view(), name='meal_delete'),
+
+    path('favourite/create', FavouriteMealCreateView.as_view(), name='favourite_create'),
+    path('favourite/delete', FavouriteMealDeleteView.as_view(), name='favourite_delete'),
+    path('favourites/', FavouriteMealListView.as_view(), name='favourites_list'),
 ]

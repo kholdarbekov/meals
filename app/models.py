@@ -84,3 +84,6 @@ class FavouriteMeal(models.Model):
 
     def __str__(self):
         return f'{self.user} favorites {self.meal}'
+
+    class Meta:
+        unique_together = ('meal', 'user')
