@@ -1,5 +1,18 @@
 import requests
 import pycountry
+from rest_framework import exceptions, status
+from rest_framework.views import exception_handler
+
+
+mappings = {
+    ' eq ': ' = ',
+    ' ne ': ' != ',
+    ' gt ': ' > ',
+    ' lt ': ' < ',
+    ' gte ': ' >= ',
+    ' lte ': ' <= ',
+    ' isn ': ' is not ',
+}
 
 
 def get_calories_from_api(food=''):
@@ -25,3 +38,38 @@ def get_country(country_code=''):
     else:
         country = pycountry.countries.get(alpha_3=country_code.upper())
     return country
+
+
+def check_required_params(required_params, request_data):
+    m = map(lambda x: x in request_data, required_params)
+    if not all(m):
+        exc = exceptions.APIException(f'request must contain {required_params}')
+        exc.status_code = status.HTTP_400_BAD_REQUEST
+        raise exc
+
+
+def custom_exception_handler(exc, context):
+    # Call REST framework's default exception handler first, to get the standard error response.
+    response = exception_handler(exc, context)
+
+    # Now add the HTTP status code to the response.
+    if response is not None:
+        details = dict()
+        details['details'] = list()
+        for data in response.data.values():
+            if isinstance(data, (list, tuple)):
+                for d in data:
+                    details['details'].append(d)
+            else:
+                details['details'].append(data)
+        response.data = details
+
+    return response
+
+
+def filter_query_convert(query):
+    if query:
+        for expression, operation in mappings.items():
+            query = query.replace(expression, operation)
+
+    return query

@@ -1,4 +1,5 @@
 import pycountry
+from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.validators import MinValueValidator
 
@@ -76,6 +77,34 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'first_name', 'last_name', 'role', 'country']
+
+
+class UserPasswordUpdateSerializer(serializers.ModelSerializer):
+    password_old = serializers.CharField(write_only=True)
+    password_new = serializers.CharField(write_only=True)
+
+    def update(self, instance, validated_data):
+        instance = super(UserPasswordUpdateSerializer, self).update(instance, validated_data)
+        instance.set_password(validated_data['password_new'])
+        instance.save()
+        return instance
+
+    def validate(self, attrs):
+        if attrs.get('password_old'):
+            if not self.instance.check_password(attrs.get('password_old')):
+                msg = _('provided password is incorrect')
+                raise serializers.ValidationError(msg, code='validation')
+        if attrs.get('password_old') == attrs.get('password_new'):
+            msg = _('old password and new password are same!')
+            raise serializers.ValidationError(msg, code='validation')
+        if attrs.get('password_new'):
+            validate_password(attrs.get('password_new'))
+
+        return attrs
+
+    class Meta:
+        model = User
+        fields = ['username', 'password_old', 'password_new']
 
 
 class MealListSerializer(serializers.ModelSerializer):
@@ -178,7 +207,7 @@ class MealUpdateSerializer(serializers.ModelSerializer):
         fields = ['id', 'title', 'type', 'calories', 'public', 'owner']
 
 
-class FavoriteMealCreateSerializer(serializers.ModelSerializer):
+class FavouriteMealCreateSerializer(serializers.ModelSerializer):
     user = serializers.SlugRelatedField(queryset=User.objects.all(), slug_field='username')
     meal = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
 
@@ -195,7 +224,7 @@ class FavoriteMealCreateSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'meal']
 
 
-class FavoriteMealListSerializer(serializers.ModelSerializer):
+class FavouriteMealListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     user = serializers.StringRelatedField(many=False, read_only=True)
     meal = serializers.StringRelatedField(many=False, read_only=True)
@@ -203,3 +232,17 @@ class FavoriteMealListSerializer(serializers.ModelSerializer):
     class Meta:
         model = FavouriteMeal
         fields = ['id', 'user', 'meal']
+
+
+class FavouriteMealUpdateSerializer(serializers.ModelSerializer):
+    meal = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
+
+    def validate(self, attrs):
+        calories = attrs.get('meal')
+
+        attrs['meal'] = calories
+        return attrs
+
+    class Meta:
+        model = FavouriteMeal
+        fields = ['id', 'meal']
