@@ -12,101 +12,6 @@ from .models import User, Meal, FavouriteMeal
 from .utils import get_calories_from_api, get_country
 
 
-class UserSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = User
-        fields = ['username', 'first_name', 'last_name', 'role', 'country']
-
-
-class UserRegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    first_name = serializers.CharField(required=False)
-    last_name = serializers.CharField(required=False)
-
-    def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data['username'],
-            password=validated_data['password'],
-            country=validated_data['country'],
-            first_name=validated_data['first_name'],
-            last_name=validated_data['last_name'],
-            role=User.REGULAR_USER
-        )
-        return user
-
-    def validate(self, attrs):
-        country_code = attrs.get('country')
-        country = get_country(country_code)
-        if not country:
-            msg = _('Country must be valid 3 letter country code')
-            raise serializers.ValidationError(msg, code='validation')
-
-        attrs['country'] = country.alpha_3
-
-        if not attrs.get('first_name'):
-            attrs['first_name'] = ''
-        if not attrs.get('last_name'):
-            attrs['last_name'] = ''
-
-        return attrs
-
-    class Meta:
-        model = User
-        fields = ['username', 'password', 'country', 'first_name', 'last_name']
-
-
-class UserUpdateSerializer(serializers.ModelSerializer):
-    country = serializers.CharField(required=False)
-    first_name = serializers.CharField(required=False)
-    last_name = serializers.CharField(required=False)
-    role = serializers.IntegerField(read_only=True)
-
-    def validate(self, attrs):
-        country_code = attrs.get('country')
-        if country_code:
-            country = get_country(country_code)
-            if not country:
-                msg = _('Country must be valid 3 letter country code')
-                raise serializers.ValidationError(msg, code='validation')
-
-            attrs['country'] = country.alpha_3
-
-        return attrs
-
-    class Meta:
-        model = User
-        fields = ['username', 'first_name', 'last_name', 'role', 'country']
-
-
-class UserPasswordUpdateSerializer(serializers.ModelSerializer):
-    password_old = serializers.CharField(write_only=True)
-    password_new = serializers.CharField(write_only=True)
-
-    def update(self, instance, validated_data):
-        instance = super(UserPasswordUpdateSerializer, self).update(instance, validated_data)
-        instance.set_password(validated_data['password_new'])
-        instance.save()
-        return instance
-
-    def validate(self, attrs):
-        if attrs.get('password_old'):
-            if not self.instance.check_password(attrs.get('password_old')):
-                msg = _('provided password is incorrect')
-                raise serializers.ValidationError(msg, code='validation')
-        if attrs.get('password_old') == attrs.get('password_new'):
-            msg = _('old password and new password are same!')
-            raise serializers.ValidationError(msg, code='validation')
-        if attrs.get('password_new'):
-            validate_password(attrs.get('password_new'))
-
-        return attrs
-
-    class Meta:
-        model = User
-        fields = ['username', 'password_old', 'password_new']
-
-
 class MealListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     owner = serializers.StringRelatedField(many=False, read_only=True)
@@ -154,7 +59,7 @@ class MealCreateSerializer(serializers.ModelSerializer):
 
         try:
             attrs['owner'] = self.context['request'].user
-        except ObjectDoesNotExist as e:
+        except (ObjectDoesNotExist, AttributeError, KeyError):
             msg = _('Meal owner not found!')
             raise serializers.ValidationError(msg, code='validation')
 
@@ -214,7 +119,7 @@ class FavouriteMealCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = attrs.get('user')
         meal = attrs.get('meal')
-        if meal in (f.meal for f in user.favourites.all()):
+        if user.favourites.filter(meal=meal):
             msg = _('Meal is already in favourite list of this user')
             raise serializers.ValidationError(msg, code='validation')
         return attrs
@@ -227,7 +132,7 @@ class FavouriteMealCreateSerializer(serializers.ModelSerializer):
 class FavouriteMealListSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     user = serializers.StringRelatedField(many=False, read_only=True)
-    meal = serializers.StringRelatedField(many=False, read_only=True)
+    meal = MealListSerializer(many=False, read_only=True)
 
     class Meta:
         model = FavouriteMeal
@@ -246,3 +151,98 @@ class FavouriteMealUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = FavouriteMeal
         fields = ['id', 'meal']
+
+
+class UserSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'role', 'country']
+
+
+class UserRegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    first_name = serializers.CharField(required=False)
+    last_name = serializers.CharField(required=False)
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password'],
+            country=validated_data['country'],
+            first_name=validated_data['first_name'],
+            last_name=validated_data['last_name'],
+            role=User.REGULAR_USER
+        )
+        return user
+
+    def validate(self, attrs):
+        country_code = attrs.get('country')
+        country = get_country(country_code)
+        if not country:
+            msg = _('Country must be valid 3 letter country code')
+            raise serializers.ValidationError(msg, code='validation')
+
+        attrs['country'] = country.alpha_3
+
+        if not attrs.get('first_name'):
+            attrs['first_name'] = ''
+        if not attrs.get('last_name'):
+            attrs['last_name'] = ''
+
+        return attrs
+
+    class Meta:
+        model = User
+        fields = ['username', 'password', 'country', 'first_name', 'last_name']
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    country = serializers.CharField(required=False, error_messages={'blank': 'country may not be blank'})
+    first_name = serializers.CharField(required=False, error_messages={'blank': 'first_name may not be blank'})
+    last_name = serializers.CharField(required=False, error_messages={'blank': 'last_name may not be blank'})
+
+    def validate(self, attrs):
+        country_code = attrs.get('country')
+        if country_code:
+            country = get_country(country_code)
+            if not country:
+                msg = _('Country must be valid 3 letter country code')
+                raise serializers.ValidationError(msg, code='validation')
+
+            attrs['country'] = country.alpha_3
+
+        return attrs
+
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'role', 'country']
+
+
+class UserPasswordUpdateSerializer(serializers.ModelSerializer):
+    password_old = serializers.CharField(write_only=True)
+    password_new = serializers.CharField(write_only=True)
+    username = serializers.CharField(write_only=True)
+
+    def update(self, instance, validated_data):
+        instance = super(UserPasswordUpdateSerializer, self).update(instance, validated_data)
+        instance.set_password(validated_data['password_new'])
+        instance.save()
+        return instance
+
+    def validate(self, attrs):
+        if attrs.get('password_old'):
+            if not self.instance.check_password(attrs.get('password_old')):
+                msg = _('provided password is incorrect')
+                raise serializers.ValidationError(msg, code='validation')
+        if attrs.get('password_old') == attrs.get('password_new'):
+            msg = _('old password and new password are same!')
+            raise serializers.ValidationError(msg, code='validation')
+        if attrs.get('password_new'):
+            validate_password(attrs.get('password_new'))
+
+        return attrs
+
+    class Meta:
+        model = User
+        fields = ['username', 'password_old', 'password_new']

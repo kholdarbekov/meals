@@ -54,6 +54,9 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+    class Meta:
+        db_table = 'users'
+
 
 class Meal(models.Model):
     BREAKFAST = 1
@@ -76,6 +79,9 @@ class Meal(models.Model):
     def __str__(self):
         return self.title
 
+    class Meta:
+        db_table = 'meals'
+
 
 class FavouriteMeal(models.Model):
     user = models.ForeignKey('User', related_name='favourites', on_delete=models.CASCADE)
@@ -87,3 +93,5 @@ class FavouriteMeal(models.Model):
 
     class Meta:
         unique_together = ('meal', 'user')
+        db_table = 'favourites'
+

@@ -11,7 +11,6 @@ mappings = {
     ' lt ': ' < ',
     ' gte ': ' >= ',
     ' lte ': ' <= ',
-    ' isn ': ' is not ',
 }
 
 
@@ -41,9 +40,17 @@ def get_country(country_code=''):
 
 
 def check_required_params(required_params, request_data):
-    m = map(lambda x: x in request_data, required_params)
+    m = map(lambda x: x in request_data and request_data.get(x), required_params)
     if not all(m):
         exc = exceptions.APIException(f'request must contain {required_params}')
+        exc.status_code = status.HTTP_400_BAD_REQUEST
+        raise exc
+
+
+def check_optional_params(optional_params, request_data):
+    m = map(lambda x: x in request_data and request_data.get(x), optional_params)
+    if not any(m):
+        exc = exceptions.APIException(f'request must contain at least on of {optional_params} parameters')
         exc.status_code = status.HTTP_400_BAD_REQUEST
         raise exc
 
@@ -68,8 +75,8 @@ def custom_exception_handler(exc, context):
 
 
 def filter_query_convert(query):
-    if query:
+    if query and isinstance(query, str):
         for expression, operation in mappings.items():
             query = query.replace(expression, operation)
 
-    return query
+    return str(query)

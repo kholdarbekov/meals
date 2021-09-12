@@ -1,8 +1,6 @@
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
-from django.db.models import QuerySet
 
-from django.shortcuts import render
 from rest_framework import generics, status, exceptions
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
@@ -13,8 +11,62 @@ from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSeria
     MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
     FavouriteMealCreateSerializer, FavouriteMealListSerializer, FavouriteMealUpdateSerializer
 from .models import User, Meal, FavouriteMeal
-from .utils import check_required_params, filter_query_convert
-from .permissions import IsAdminRoleUser, IsModeratorRoleUser, IsAdminOrModeratorRoleUser, IsAdminOrRegularRoleUser
+from .utils import check_required_params, check_optional_params, filter_query_convert
+from .permissions import IsAdminOrModeratorRoleUser, IsAdminOrRegularRoleUser
+
+
+class UserView(generics.GenericAPIView):
+
+    def get_object(self):
+        error_message = list()
+        user = None
+        try:
+            if self.request.user.role != User.REGULAR_USER:
+                username = self.request.data['username']
+                user = User.objects.get(username=username)
+            else:
+                user = self.request.user
+                self.request.data['username'] = user.username
+        except KeyError as key:
+            error_message.append('{param} is not sent'.format(param=key))
+        except ObjectDoesNotExist:
+            error_message.append('User not found')
+        except Exception as e:
+            error_message.extend(e.args)
+
+        if error_message:
+            exc = exceptions.APIException(*error_message)
+            exc.status_code = status.HTTP_400_BAD_REQUEST
+            raise exc
+
+        return user
+
+
+class MealView(generics.GenericAPIView):
+
+    def get_object(self):
+        error_message = list()
+        meal = None
+        try:
+            meal_id = self.request.data['id']
+            meal = Meal.objects.get(id=meal_id)
+            if self.request.user.role == User.REGULAR_USER:
+                if meal.owner != self.request.user:
+                    error_message.append(f'Meal with id={meal_id} does not belong to you')
+
+        except KeyError as key:
+            error_message.append('{param} is not sent'.format(param=key))
+        except ObjectDoesNotExist:
+            error_message.append('Meal not found')
+        except Exception as e:
+            error_message.extend(e.args)
+
+        if error_message:
+            exc = exceptions.APIException(*error_message)
+            exc.status_code = status.HTTP_400_BAD_REQUEST
+            raise exc
+
+        return meal
 
 
 class UserLoginView(ObtainAuthToken):
@@ -28,7 +80,7 @@ class UserLoginView(ObtainAuthToken):
         user = serializer.validated_data['user']
         token, created = Token.objects.get_or_create(user=user)
 
-        return Response({'token': token.key, 'type': user.role})
+        return Response({'token': token.key, 'role': user.role})
 
 
 class UsersListView(generics.ListAPIView):
@@ -44,9 +96,9 @@ class UsersListView(generics.ListAPIView):
         query = filter_query_convert(self.request.data.get('query'))
 
         if query:
-            select = f"SELECT * FROM app_user WHERE role in {tuple(roles)} AND " + query
+            select = f"SELECT * FROM users WHERE role in {tuple(roles)} AND " + query
         else:
-            select = f"SELECT * FROM app_user WHERE role in {tuple(roles)}"
+            select = f"SELECT * FROM users WHERE role in {tuple(roles)}"
         try:
             users = User.objects.raw(select)
             _ = bool(users)
@@ -73,101 +125,42 @@ class UserRegisterView(generics.CreateAPIView):
         return Response({'token': token.key, 'role': user.role}, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class UserUpdateView(generics.UpdateAPIView):
+class UserUpdateView(UserView, generics.UpdateAPIView):
     serializer_class = UserUpdateSerializer
     permission_classes = [IsAuthenticated, ]
 
     def put(self, request, *args, **kwargs):
-        required_params = ('username',)
-        check_required_params(required_params, request.data)
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('username',)
+            check_required_params(required_params, request.data)
+
+        optional_params = ('first_name', 'last_name', 'country',)
+        check_optional_params(optional_params, request.data)
         return super(UserUpdateView, self).put(request, *args, **kwargs)
 
-    def get_object(self):
-        error_message = list()
-        user = None
-        try:
-            username = self.request.data['username']
-            if self.request.user.role == User.REGULAR_USER:
-                if self.request.user.username != username:
-                    error_message.append("Can not edit other users' info")
-            if not error_message:
-                user = User.objects.get(username=username)
-        except KeyError as key:
-            error_message.append('{param} is not sent'.format(param=key))
-        except ObjectDoesNotExist:
-            error_message.append('User not found')
-        except Exception as e:
-            error_message.extend(e.args)
 
-        if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        return user
-
-
-class UserPasswordUpdateView(generics.UpdateAPIView):
+class UserPasswordUpdateView(UserView, generics.UpdateAPIView):
     serializer_class = UserPasswordUpdateSerializer
     permission_classes = [IsAuthenticated, ]
 
     def put(self, request, *args, **kwargs):
-        required_params = ('username', 'password_old', 'password_new')
-        check_required_params(required_params, request.data)
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('username', 'password_old', 'password_new')
+            check_required_params(required_params, request.data)
+        else:
+            required_params = ('password_old', 'password_new')
+            check_required_params(required_params, request.data)
         return super(UserPasswordUpdateView, self).put(request, *args, **kwargs)
 
-    def get_object(self):
-        error_message = list()
-        user = None
-        try:
-            username = self.request.data['username']
-            if self.request.user.role == User.REGULAR_USER:
-                if self.request.user.username != username:
-                    error_message.append("Can not change other users' password")
-            if not error_message:
-                user = User.objects.get(username=username)
-        except KeyError as key:
-            error_message.append('{param} is not sent'.format(param=key))
-        except ObjectDoesNotExist:
-            error_message.append('User not found')
-        except Exception as e:
-            error_message.extend(e.args)
 
-        if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        return user
-
-
-class UserDeleteView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated, IsAdminOrModeratorRoleUser]
+class UserDeleteView(UserView, generics.DestroyAPIView):
+    permission_classes = [IsAuthenticated, ]
 
     def delete(self, request, *args, **kwargs):
-        required_params = ('username',)
-        check_required_params(required_params, request.data)
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('username',)
+            check_required_params(required_params, request.data)
         return super(UserDeleteView, self).delete(request, *args, **kwargs)
-
-    def get_object(self):
-        error_message = list()
-        user = None
-        try:
-            username = self.request.data['username']
-            user = User.objects.get(username=username)
-        except KeyError:
-            error_message.append('parameter id is not sent')
-        except ObjectDoesNotExist:
-            error_message.append('User not found')
-        except Exception as e:
-            error_message.extend(e.args)
-
-        if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        return user
 
 
 class MealListView(generics.ListAPIView):
@@ -175,13 +168,15 @@ class MealListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def get_queryset(self):
-        # meals = Meal.objects.filter(public=True)
         query = filter_query_convert(self.request.data.get('query'))
-
         if query:
-            select = f"SELECT * FROM app_meal WHERE public=1 AND " + query
+            select = f"SELECT * FROM meals WHERE " + query
+            if self.request.user.role == User.REGULAR_USER:
+                select += f" AND public=1 AND owner_id={self.request.user.id}"
         else:
-            select = f"SELECT * FROM app_meal public=1"
+            select = f"SELECT * FROM meals"
+            if self.request.user.role == User.REGULAR_USER:
+                select += f" WHERE public=1 AND owner_id={self.request.user.id}"
         try:
             meals = Meal.objects.raw(select)
             _ = bool(meals)
@@ -206,7 +201,7 @@ class MealCreateView(generics.CreateAPIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
-class MealUpdateView(generics.UpdateAPIView):
+class MealUpdateView(MealView, generics.UpdateAPIView):
     serializer_class = MealUpdateSerializer
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
@@ -215,28 +210,8 @@ class MealUpdateView(generics.UpdateAPIView):
         check_required_params(required_params, request.data)
         return super(MealUpdateView, self).put(request, *args, **kwargs)
 
-    def get_object(self):
-        error_message = list()
-        meal = None
-        try:
-            meal_id = self.request.data['id']
-            meal = Meal.objects.get(id=meal_id)
-        except KeyError as key:
-            error_message.append('{param} is not sent'.format(param=key))
-        except ObjectDoesNotExist:
-            error_message.append('Meal not found')
-        except Exception as e:
-            error_message.extend(e.args)
 
-        if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        return meal
-
-
-class MealDeleteView(generics.DestroyAPIView):
+class MealDeleteView(MealView, generics.DestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def delete(self, request, *args, **kwargs):
@@ -244,52 +219,42 @@ class MealDeleteView(generics.DestroyAPIView):
         check_required_params(required_params, request.data)
         return super(MealDeleteView, self).delete(request, *args, **kwargs)
 
-    def get_object(self):
-        error_message = list()
-        meal = None
-        try:
-            meal_id = self.request.data['id']
-            meal = Meal.objects.get(id=meal_id)
-        except KeyError as key:
-            error_message.append('{param} is not sent'.format(param=key))
-        except ObjectDoesNotExist:
-            error_message.append('Meal not found')
-        except Exception as e:
-            error_message.extend(e.args)
-
-        if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        return meal
-
 
 class FavouriteMealCreateView(generics.CreateAPIView):
     serializer_class = FavouriteMealCreateSerializer
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
+    def post(self, request, *args, **kwargs):
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('user', 'meal')
+            check_required_params(required_params, request.data)
+        else:
+            required_params = ('meal', )
+            check_required_params(required_params, request.data)
+
+        return super(FavouriteMealCreateView, self).post(request, *args, **kwargs)
+
     def create(self, request, *args, **kwargs):
         error_message = list()
-
-        required_params = ('user', 'meal')
-        check_required_params(required_params, request.data)
-
         meal = None
         user = None
         try:
-            username = request.data['user']
-            user = User.objects.get(username=username)
-        except ObjectDoesNotExist as exc:
+            if request.user.role != User.REGULAR_USER:
+                username = request.data['user']
+                user = User.objects.get(username=username)
+            else:
+                user = request.user
+                request.data['user'] = user.username
+        except ObjectDoesNotExist:
             error_message.append('User Not found')
 
         try:
             meal_id = request.data['meal']
             meal = Meal.objects.get(id=meal_id)
-        except ObjectDoesNotExist as exc:
+        except ObjectDoesNotExist:
             error_message.append('Meal Not found')
 
-        if user.favourites:
+        if user:
             if user.favourites.filter(meal=meal):
                 error_message.append('Meal is already in favourite list of this user')
 
@@ -315,12 +280,15 @@ class FavouriteMealDeleteView(generics.DestroyAPIView):
         error_message = list()
         favourite = None
         try:
-            meal_id = self.request.data['meal_id']
-            favourite = FavouriteMeal.objects.filter(user=self.request.user, meal_id=meal_id)
-            if not favourite:
-                error_message.append('Meal not found in favourite list')
-        except KeyError:
-            error_message.append('parameter id is not sent')
+            favourite_id = self.request.data['id']
+            favourite = FavouriteMeal.objects.get(id=favourite_id)
+            if self.request.user.role == User.REGULAR_USER:
+                if favourite.user != self.request.user:
+                    error_message.append('Favourite does not belong to you')
+        except KeyError as key:
+            error_message.append('parameter {key} is not sent'.format(key=key))
+        except ObjectDoesNotExist:
+            error_message.append('Favourite not found')
         except Exception as e:
             error_message.extend(e.args)
 
@@ -337,24 +305,13 @@ class FavouriteMealListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def get_queryset(self):
-        favourites = None
-
-        '''
-        if self.request.user.role == User.REGULAR_USER:
-            if self.request.user.favourites:
-                favourites = self.request.user.favourites.all()
-        elif self.request.user.role == User.ADMIN:
-            favourites = FavouriteMeal.objects.all()
-        '''
-
         query = filter_query_convert(self.request.data.get('query'))
-
         if query:
-            select = f"SELECT * FROM app_favouritemeal WHERE " + query
+            select = f"SELECT * FROM favourites WHERE " + query
             if self.request.user.role == User.REGULAR_USER:
                 select += f" AND user_id={self.request.user.id}"
         else:
-            select = f"SELECT * FROM app_favouritemeal"
+            select = f"SELECT * FROM favourites"
             if self.request.user.role == User.REGULAR_USER:
                 select += f" WHERE user_id={self.request.user.id}"
 
@@ -378,6 +335,9 @@ class FavouriteMealUpdateView(generics.UpdateAPIView):
         try:
             favourite_id = self.request.data['id']
             favourite = FavouriteMeal.objects.get(id=favourite_id)
+            if self.request.user.role == User.REGULAR_USER:
+                if favourite.user != self.request.user:
+                    error_message.append('Favourite does not belong to you')
         except KeyError as key:
             error_message.append('{param} is not sent'.format(param=key))
         except ObjectDoesNotExist:
