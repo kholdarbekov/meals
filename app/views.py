@@ -91,14 +91,13 @@ class UsersListView(generics.ListAPIView):
         roles = [User.REGULAR_USER]
         if self.request.user.role == User.ADMIN:
             roles += [User.MODERATOR]
-        # users = User.objects.filter(role__in=roles)
 
         query = filter_query_convert(self.request.data.get('query'))
 
         if query:
-            select = f"SELECT * FROM users WHERE role in {tuple(roles)} AND " + query
+            select = f"SELECT * FROM users WHERE role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'} AND " + str(query)
         else:
-            select = f"SELECT * FROM users WHERE role in {tuple(roles)}"
+            select = f"SELECT * FROM users WHERE role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'}"
         try:
             users = User.objects.raw(select)
             _ = bool(users)
@@ -113,9 +112,12 @@ class UserRegisterView(generics.CreateAPIView):
     serializer_class = UserRegisterSerializer
     permission_classes = [AllowAny, ]
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
         required_params = ('username', 'password', 'country')
         check_required_params(required_params, request.data)
+        return super(UserRegisterView, self).post(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)
@@ -146,10 +148,9 @@ class UserPasswordUpdateView(UserView, generics.UpdateAPIView):
     def put(self, request, *args, **kwargs):
         if request.user.role != User.REGULAR_USER:
             required_params = ('username', 'password_old', 'password_new')
-            check_required_params(required_params, request.data)
         else:
             required_params = ('password_old', 'password_new')
-            check_required_params(required_params, request.data)
+        check_required_params(required_params, request.data)
         return super(UserPasswordUpdateView, self).put(request, *args, **kwargs)
 
 
@@ -170,13 +171,13 @@ class MealListView(generics.ListAPIView):
     def get_queryset(self):
         query = filter_query_convert(self.request.data.get('query'))
         if query:
-            select = f"SELECT * FROM meals WHERE " + query
+            select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id AND " + str(query)
             if self.request.user.role == User.REGULAR_USER:
-                select += f" AND public=1 AND owner_id={self.request.user.id}"
+                select += " AND meals.public=1"
         else:
-            select = f"SELECT * FROM meals"
+            select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id"
             if self.request.user.role == User.REGULAR_USER:
-                select += f" WHERE public=1 AND owner_id={self.request.user.id}"
+                select += " AND meals.public=1"
         try:
             meals = Meal.objects.raw(select)
             _ = bool(meals)
@@ -227,11 +228,9 @@ class FavouriteMealCreateView(generics.CreateAPIView):
     def post(self, request, *args, **kwargs):
         if request.user.role != User.REGULAR_USER:
             required_params = ('user', 'meal')
-            check_required_params(required_params, request.data)
         else:
             required_params = ('meal', )
-            check_required_params(required_params, request.data)
-
+        check_required_params(required_params, request.data)
         return super(FavouriteMealCreateView, self).post(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
@@ -251,6 +250,9 @@ class FavouriteMealCreateView(generics.CreateAPIView):
         try:
             meal_id = request.data['meal']
             meal = Meal.objects.get(id=meal_id)
+            if meal.owner != user:
+                if not meal.public:
+                    error_message.append('Meal is not public')
         except ObjectDoesNotExist:
             error_message.append('Meal Not found')
 
@@ -307,13 +309,21 @@ class FavouriteMealListView(generics.ListAPIView):
     def get_queryset(self):
         query = filter_query_convert(self.request.data.get('query'))
         if query:
-            select = f"SELECT * FROM favourites WHERE " + query
+            select = """SELECT favourites.* 
+                        FROM favourites, meals, users 
+                        WHERE meals.id=favourites.meal_id 
+                        AND users.id=favourites.user_id
+                        AND """ + str(query)
             if self.request.user.role == User.REGULAR_USER:
-                select += f" AND user_id={self.request.user.id}"
+                select += f" AND favourites.user_id={self.request.user.id}"
         else:
-            select = f"SELECT * FROM favourites"
+            select = """SELECT favourites.* 
+                        FROM favourites, meals, users 
+                        WHERE meals.id=favourites.meal_id 
+                        AND users.id=favourites.user_id
+                        """
             if self.request.user.role == User.REGULAR_USER:
-                select += f" WHERE user_id={self.request.user.id}"
+                select += f" AND favourites.user_id={self.request.user.id}"
 
         try:
             favourites = FavouriteMeal.objects.raw(select)
@@ -329,27 +339,58 @@ class FavouriteMealUpdateView(generics.UpdateAPIView):
     serializer_class = FavouriteMealUpdateSerializer
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
+    def put(self, request, *args, **kwargs):
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('id', 'user', 'new_meal_id')
+        else:
+            required_params = ('id', 'new_meal_id')
+        check_required_params(required_params, request.data)
+        return super(FavouriteMealUpdateView, self).put(request, *args, **kwargs)
+
     def get_object(self):
         error_message = list()
         favourite = None
+        meal = None
+        user = None
+
         try:
             favourite_id = self.request.data['id']
             favourite = FavouriteMeal.objects.get(id=favourite_id)
             if self.request.user.role == User.REGULAR_USER:
                 if favourite.user != self.request.user:
                     error_message.append('Favourite does not belong to you')
-        except KeyError as key:
-            error_message.append('{param} is not sent'.format(param=key))
         except ObjectDoesNotExist:
-            error_message.append('Favourite Meal not found')
+            error_message.append('Favourite not found')
         except Exception as e:
             error_message.extend(e.args)
 
         try:
-            meal_id = self.request.data['meal']
-            _ = Meal.objects.get(id=meal_id)
+            meal_id = self.request.data['new_meal_id']
+            meal = Meal.objects.get(id=meal_id)
+            if self.request.user.role == User.REGULAR_USER:
+                if meal.owner != self.request.user:
+                    if not meal.public:
+                        error_message.append('Meal is not public')
         except ObjectDoesNotExist:
             error_message.append('Meal not found')
+        except Exception as e:
+            error_message.extend(e.args)
+
+        try:
+            if self.request.user.role != User.REGULAR_USER:
+                username = self.request.data['user']
+                user = User.objects.get(username=username)
+            else:
+                user = self.request.user
+        except ObjectDoesNotExist:
+            error_message.append('User not found')
+
+        try:
+            f = FavouriteMeal.objects.get(user=user, meal=meal)
+            if f:
+                error_message.append('Meal is already in favourite list of this user')
+        except ObjectDoesNotExist:
+            pass
 
         if error_message:
             exc = exceptions.APIException(*error_message)

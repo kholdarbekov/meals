@@ -140,17 +140,11 @@ class FavouriteMealListSerializer(serializers.ModelSerializer):
 
 
 class FavouriteMealUpdateSerializer(serializers.ModelSerializer):
-    meal = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
-
-    def validate(self, attrs):
-        calories = attrs.get('meal')
-
-        attrs['meal'] = calories
-        return attrs
+    new_meal_id = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
 
     class Meta:
         model = FavouriteMeal
-        fields = ['id', 'meal']
+        fields = ['id', 'new_meal_id']
 
 
 class UserSerializer(serializers.ModelSerializer):

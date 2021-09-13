@@ -79,4 +79,4 @@ def filter_query_convert(query):
         for expression, operation in mappings.items():
             query = query.replace(expression, operation)
 
-    return str(query)
+    return query
