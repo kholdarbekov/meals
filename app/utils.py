@@ -1,8 +1,11 @@
+import logging
+
 import requests
 import pycountry
 from rest_framework import exceptions, status
 from rest_framework.views import exception_handler
 
+errors_logger = logging.getLogger('errors_log')
 
 mappings = {
     ' eq ': ' = ',
@@ -70,6 +73,8 @@ def custom_exception_handler(exc, context):
             else:
                 details['details'].append(data)
         response.data = details
+
+    errors_logger.error('Error', exc_info=exc)
 
     return response
 

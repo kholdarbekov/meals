@@ -240,3 +240,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Environment Variables
+enviroment_values.sh

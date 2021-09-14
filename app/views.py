@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
 
@@ -15,6 +17,9 @@ from .utils import check_required_params, check_optional_params, filter_query_co
 from .permissions import IsAdminOrModeratorRoleUser, IsAdminOrRegularRoleUser
 
 
+logger = logging.getLogger('app_log')
+
+
 class UserView(generics.GenericAPIView):
 
     def get_object(self):
@@ -23,7 +28,7 @@ class UserView(generics.GenericAPIView):
         try:
             if self.request.user.role != User.REGULAR_USER:
                 username = self.request.data['username']
-                user = User.objects.get(username=username)
+                user = User.objects.get(username=username, is_superuser=False, is_staff=False)
             else:
                 user = self.request.user
                 self.request.data['username'] = user.username
@@ -73,6 +78,7 @@ class UserLoginView(ObtainAuthToken):
     permission_classes = [AllowAny, ]
 
     def post(self, request, *args, **kwargs):
+        logger.info(f'UserLoginView: request.data={request.data}')
         required_params = ('username', 'password')
         check_required_params(required_params, request.data)
         serializer = self.get_serializer(data=request.data)
@@ -90,14 +96,22 @@ class UsersListView(generics.ListAPIView):
     def get_queryset(self):
         roles = [User.REGULAR_USER]
         if self.request.user.role == User.ADMIN:
-            roles += [User.MODERATOR]
+            roles += [User.MODERATOR, User.ADMIN]
 
         query = filter_query_convert(self.request.data.get('query'))
 
         if query:
-            select = f"SELECT * FROM users WHERE role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'} AND " + str(query)
+            select = "SELECT * FROM users WHERE " + str(query)
         else:
-            select = f"SELECT * FROM users WHERE role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'}"
+            select = "SELECT * FROM users WHERE 1=1 "
+
+        select += f" AND role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'}"
+
+        if not self.request.user.is_superuser:
+            select += " AND is_superuser = False AND is_staff = False"
+
+        logger.info(f'UsersListView: user={self.request.user}, select={select}')
+
         try:
             users = User.objects.raw(select)
             _ = bool(users)
@@ -113,18 +127,29 @@ class UserRegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny, ]
 
     def post(self, request, *args, **kwargs):
+        logger.info(f'UserRegisterView: request.data={request.data}, request.user={request.user}')
         required_params = ('username', 'password', 'country')
+        if request.user.is_authenticated:
+            if request.user.role == User.ADMIN:
+                required_params = ('username', 'password', 'country', 'role')
         check_required_params(required_params, request.data)
         return super(UserRegisterView, self).post(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
+        kwargs = {'role': User.REGULAR_USER}
+        if request.user.is_authenticated:
+            if request.user.role == User.ADMIN:
+                kwargs['role'] = request.data['role']
+        self.perform_create(serializer, **kwargs)
         headers = self.get_success_headers(serializer.data)
         user = serializer.instance
         token, created = Token.objects.get_or_create(user=user)
         return Response({'token': token.key, 'role': user.role}, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer, **kwargs):
+        serializer.save(**kwargs)
 
 
 class UserUpdateView(UserView, generics.UpdateAPIView):
@@ -132,6 +157,7 @@ class UserUpdateView(UserView, generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, ]
 
     def put(self, request, *args, **kwargs):
+        logger.info(f'UserUpdateView: user={request.user}, request.data={request.data}')
         if request.user.role != User.REGULAR_USER:
             required_params = ('username',)
             check_required_params(required_params, request.data)
@@ -146,6 +172,7 @@ class UserPasswordUpdateView(UserView, generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, ]
 
     def put(self, request, *args, **kwargs):
+        logger.info(f'UserPasswordUpdateView: user={request.user}, request.data={request.data}')
         if request.user.role != User.REGULAR_USER:
             required_params = ('username', 'password_old', 'password_new')
         else:
@@ -158,6 +185,7 @@ class UserDeleteView(UserView, generics.DestroyAPIView):
     permission_classes = [IsAuthenticated, ]
 
     def delete(self, request, *args, **kwargs):
+        logger.info(f'UserDeleteView: user={request.user}, request.data={request.data}')
         if request.user.role != User.REGULAR_USER:
             required_params = ('username',)
             check_required_params(required_params, request.data)
@@ -169,15 +197,18 @@ class MealListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def get_queryset(self):
+
         query = filter_query_convert(self.request.data.get('query'))
         if query:
             select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id AND " + str(query)
-            if self.request.user.role == User.REGULAR_USER:
-                select += " AND meals.public=1"
         else:
             select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id"
-            if self.request.user.role == User.REGULAR_USER:
-                select += " AND meals.public=1"
+
+        if self.request.user.role == User.REGULAR_USER:
+            select += " AND (meals.public=True OR (meals.public=False AND meals.owner_id={}))".format(self.request.user.id)
+
+        logger.info(f'MealListView: user={self.request.user}, select={select}')
+
         try:
             meals = Meal.objects.raw(select)
             _ = bool(meals)
@@ -192,14 +223,11 @@ class MealCreateView(generics.CreateAPIView):
     serializer_class = MealCreateSerializer
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
-    def create(self, request, *args, **kwargs):
+    def post(self, request, *args, **kwargs):
+        logger.info(f'MealCreateView: user={request.user}, request.data={request.data}')
         required_params = ('title', 'type')
         check_required_params(required_params, request.data)
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return super(MealCreateView, self).post(request, *args, **kwargs)
 
 
 class MealUpdateView(MealView, generics.UpdateAPIView):
@@ -207,6 +235,7 @@ class MealUpdateView(MealView, generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def put(self, request, *args, **kwargs):
+        logger.info(f'MealUpdateView: user={request.user}, request.data={request.data}')
         required_params = ('id',)
         check_required_params(required_params, request.data)
         return super(MealUpdateView, self).put(request, *args, **kwargs)
@@ -216,6 +245,7 @@ class MealDeleteView(MealView, generics.DestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def delete(self, request, *args, **kwargs):
+        logger.info(f'MealDeleteView: user={request.user}, request.data={request.data}')
         required_params = ('id',)
         check_required_params(required_params, request.data)
         return super(MealDeleteView, self).delete(request, *args, **kwargs)
@@ -226,6 +256,7 @@ class FavouriteMealCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def post(self, request, *args, **kwargs):
+        logger.info(f'FavouriteMealCreateView: user={request.user}, request.data={request.data}')
         if request.user.role != User.REGULAR_USER:
             required_params = ('user', 'meal')
         else:
@@ -240,7 +271,7 @@ class FavouriteMealCreateView(generics.CreateAPIView):
         try:
             if request.user.role != User.REGULAR_USER:
                 username = request.data['user']
-                user = User.objects.get(username=username)
+                user = User.objects.get(username=username, is_superuser=False, is_staff=False)
             else:
                 user = request.user
                 request.data['user'] = user.username
@@ -279,6 +310,7 @@ class FavouriteMealDeleteView(generics.DestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def get_object(self):
+        logger.info(f'FavouriteMealDeleteView: user={self.request.user}, request.data={self.request.data}')
         error_message = list()
         favourite = None
         try:
@@ -325,6 +357,8 @@ class FavouriteMealListView(generics.ListAPIView):
             if self.request.user.role == User.REGULAR_USER:
                 select += f" AND favourites.user_id={self.request.user.id}"
 
+        logger.info(f'FavouriteMealListView: user={self.request.user}, select={select}')
+
         try:
             favourites = FavouriteMeal.objects.raw(select)
             _ = bool(favourites)
@@ -340,6 +374,7 @@ class FavouriteMealUpdateView(generics.UpdateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def put(self, request, *args, **kwargs):
+        logger.info(f'FavouriteMealUpdateView: user={request.user}, request.data={request.data}')
         if request.user.role != User.REGULAR_USER:
             required_params = ('id', 'user', 'new_meal_id')
         else:
@@ -379,7 +414,7 @@ class FavouriteMealUpdateView(generics.UpdateAPIView):
         try:
             if self.request.user.role != User.REGULAR_USER:
                 username = self.request.data['user']
-                user = User.objects.get(username=username)
+                user = User.objects.get(username=username, is_superuser=False, is_staff=False)
             else:
                 user = self.request.user
         except ObjectDoesNotExist:

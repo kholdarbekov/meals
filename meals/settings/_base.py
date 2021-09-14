@@ -15,7 +15,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def get_secret(setting):
@@ -156,4 +156,47 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
 
     'EXCEPTION_HANDLER': 'app.utils.custom_exception_handler'
+}
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        'verbose': {
+            'format': "[%(asctime)s] %(levelname)s [%(name)s:%(pathname)s:%(lineno)s] %(message)s",
+            'datefmt': "%d/%b/%Y %H:%M:%S"
+        },
+        'exception_verbose': {
+            'format': "[%(asctime)s] %(levelname)s [%(name)s] %(message)s",
+            'datefmt': "%d/%b/%Y %H:%M:%S"
+        },
+    },
+    "handlers": {
+        'app': {
+            'level': 'INFO',
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'app.log'),
+            'when': 'midnight',
+            'interval': 1,
+            'backupCount': 365,  # how many backup file to keep, 1 year
+            'formatter': 'verbose',
+        },
+        'errors': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'logs', 'errors.log'),
+            'when': 'midnight',
+            'interval': 1,
+            'backupCount': 365,  # how many backup file to keep, 1 year
+            'formatter': 'exception_verbose',
+        },
+    },
+    "loggers": {
+        'app_log': {
+            'handlers': ['app', ],
+            'level': 'INFO',
+        },
+        'errors_log': {
+            'handlers': ['errors', ],
+        },
+    }
 }

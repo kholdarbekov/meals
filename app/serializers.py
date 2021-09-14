@@ -78,20 +78,10 @@ class MealUpdateSerializer(serializers.ModelSerializer):
     public = serializers.BooleanField(required=False)
 
     def update(self, instance, validated_data):
-        '''
-        if not validated_data['title']:
-            validated_data['title'] = instance.title
-        if not validated_data.get('type'):
-            validated_data['type'] = instance.type
-        if not validated_data.get('calories'):
-            validated_data['calories'] = instance.calories
-        if not validated_data.get('public'):
-            validated_data['public'] = instance.public
-        if not validated_data.get('owner'):
-            validated_data['owner'] = instance.owner
-        '''
+        if instance.public and not validated_data['public']:
+            favourites = instance.favorited_users.all()
+            favourites.delete()
         instance = super().update(instance, validated_data)
-
         return instance
 
     def validate(self, attrs):
@@ -166,7 +156,7 @@ class UserRegisterSerializer(serializers.ModelSerializer):
             country=validated_data['country'],
             first_name=validated_data['first_name'],
             last_name=validated_data['last_name'],
-            role=User.REGULAR_USER
+            role=validated_data['role']
         )
         return user
 
