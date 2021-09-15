@@ -4,7 +4,7 @@ from .models import User
 
 class IsAdminRoleUser(BasePermission):
     """
-    Allows access only to admin role users.
+    Allows access only to admin users.
     """
 
     def has_permission(self, request, view):
@@ -13,7 +13,7 @@ class IsAdminRoleUser(BasePermission):
 
 class IsModeratorRoleUser(BasePermission):
     """
-    Allows access only to admin role users.
+    Allows access only to moderator users.
     """
 
     def has_permission(self, request, view):
@@ -22,7 +22,7 @@ class IsModeratorRoleUser(BasePermission):
 
 class IsAdminOrModeratorRoleUser(BasePermission):
     """
-    Allows access only to admin role users.
+    Allows access only to admin or moderator users.
     """
 
     def has_permission(self, request, view):
@@ -31,7 +31,7 @@ class IsAdminOrModeratorRoleUser(BasePermission):
 
 class IsAdminOrRegularRoleUser(BasePermission):
     """
-    Allows access only to admin role users.
+    Allows access only to admin or regular users.
     """
 
     def has_permission(self, request, view):

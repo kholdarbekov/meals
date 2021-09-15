@@ -1,9 +1,10 @@
 import logging
+import operator
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import DatabaseError
+from django.db import models, DatabaseError
 
-from rest_framework import generics, status, exceptions
+from rest_framework import generics, status, exceptions, filters
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.response import Response
@@ -228,6 +229,25 @@ class MealCreateView(generics.CreateAPIView):
         required_params = ('title', 'type')
         check_required_params(required_params, request.data)
         return super(MealCreateView, self).post(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        kwargs = {'owner': request.user}
+        if request.user.role == User.ADMIN and request.data.get('user'):
+            try:
+                user = User.objects.get(username=request.data['user'], is_superuser=False, is_staff=False)
+                kwargs['owner'] = user
+            except ObjectDoesNotExist:
+                exc = exceptions.APIException(f'User not found with username={request.data["user"]}')
+                exc.status_code = status.HTTP_400_BAD_REQUEST
+                raise exc
+        self.perform_create(serializer, **kwargs)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer, **kwargs):
+        serializer.save(**kwargs)
 
 
 class MealUpdateView(MealView, generics.UpdateAPIView):

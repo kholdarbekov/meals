@@ -1,6 +1,6 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 
 from django.utils.translation import gettext_lazy as _
@@ -10,6 +10,8 @@ class UserManager(BaseUserManager):
     def create_user(self, username, country, password=None, **extra_fields):
         if not username:
             raise ValueError(_('The given username must be set'))
+        if not password:
+            raise ValueError(_('The given password must be set'))
         if not country:
             raise ValueError(_('The given country must be set'))
         # Lookup the real model class from the global app registry so this
@@ -79,6 +81,20 @@ class Meal(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, force_insert=False, force_update=False, using=None, update_fields=None):
+        try:
+            meal_old = Meal.objects.get(id=self.id)
+            if meal_old.public and not self.public:
+                # if public meal becomes private then delete all favourites of this meal
+                favourites = self.favorited_users.all()
+                favourites.delete()
+        except ObjectDoesNotExist:
+            pass
+        except MultipleObjectsReturned:
+            pass
+
+        return super(Meal, self).save(force_insert, force_update, using, update_fields)
 
     class Meta:
         db_table = 'meals'

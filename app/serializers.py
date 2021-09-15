@@ -56,13 +56,13 @@ class MealCreateSerializer(serializers.ModelSerializer):
             calories = get_calories_from_api(attrs.get('title'))
 
         attrs['calories'] = calories
-
+        '''
         try:
             attrs['owner'] = self.context['request'].user
         except (ObjectDoesNotExist, AttributeError, KeyError):
             msg = _('Meal owner not found!')
             raise serializers.ValidationError(msg, code='validation')
-
+        '''
         return attrs
 
     class Meta:
@@ -76,13 +76,6 @@ class MealUpdateSerializer(serializers.ModelSerializer):
     type = serializers.IntegerField(min_value=1, required=False)
     title = serializers.CharField(required=False, max_length=256)
     public = serializers.BooleanField(required=False)
-
-    def update(self, instance, validated_data):
-        if instance.public and not validated_data['public']:
-            favourites = instance.favorited_users.all()
-            favourites.delete()
-        instance = super().update(instance, validated_data)
-        return instance
 
     def validate(self, attrs):
         calories = attrs.get('calories')

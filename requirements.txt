@@ -1,6 +1,7 @@
 asgiref==3.4.1
 certifi==2021.5.30
 charset-normalizer==2.0.4
+coverage==5.5
 Django==3.2.7
 djangorestframework==3.12.4
 idna==3.2
