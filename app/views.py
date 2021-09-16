@@ -14,7 +14,7 @@ from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSeria
     MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
     FavouriteMealCreateSerializer, FavouriteMealListSerializer, FavouriteMealUpdateSerializer
 from .models import User, Meal, FavouriteMeal
-from .utils import check_required_params, check_optional_params, filter_query_convert
+from .utils import check_required_params, check_optional_params, filter_query_convert, filter_query_to_q
 from .permissions import IsAdminOrModeratorRoleUser, IsAdminOrRegularRoleUser
 
 
@@ -198,8 +198,10 @@ class MealListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
 
     def get_queryset(self):
-
+        q = filter_query_to_q(self.request.data.get('query'), 'MEAL')
+        '''
         query = filter_query_convert(self.request.data.get('query'))
+
         if query:
             select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id AND " + str(query)
         else:
@@ -209,7 +211,7 @@ class MealListView(generics.ListAPIView):
             select += " AND (meals.public=True OR (meals.public=False AND meals.owner_id={}))".format(self.request.user.id)
 
         logger.info(f'MealListView: user={self.request.user}, select={select}')
-
+        
         try:
             meals = Meal.objects.raw(select)
             _ = bool(meals)
@@ -218,6 +220,8 @@ class MealListView(generics.ListAPIView):
             exc = exceptions.APIException(exc.args[0])
             exc.status_code = status.HTTP_400_BAD_REQUEST
             raise exc
+        '''
+        return Meal.objects.filter(q)
 
 
 class MealCreateView(generics.CreateAPIView):

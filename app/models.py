@@ -78,6 +78,8 @@ class Meal(models.Model):
     calories = models.FloatField(default=0.0, blank=True, null=True)
     owner = models.ForeignKey('User', related_name='meals', on_delete=models.CASCADE)
     public = models.BooleanField(default=False)
+    created_date = models.DateTimeField(auto_now_add=True)
+    last_edited = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.title
@@ -96,6 +98,12 @@ class Meal(models.Model):
 
         return super(Meal, self).save(force_insert, force_update, using, update_fields)
 
+    @property
+    def country(self):
+        if self.owner:
+            return self.owner.country
+        return ''
+
     class Meta:
         db_table = 'meals'
 
@@ -104,6 +112,7 @@ class FavouriteMeal(models.Model):
     user = models.ForeignKey('User', related_name='favourites', on_delete=models.CASCADE)
     meal = models.ForeignKey('Meal', related_name='favorited_users', on_delete=models.CASCADE)
     created = models.DateTimeField(auto_now_add=True)
+    last_edited = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f'{self.user} favorites {self.meal}'

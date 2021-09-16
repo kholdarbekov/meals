@@ -125,6 +125,10 @@ class FavouriteMealListSerializer(serializers.ModelSerializer):
 class FavouriteMealUpdateSerializer(serializers.ModelSerializer):
     new_meal_id = serializers.SlugRelatedField(queryset=Meal.objects.all(), slug_field='id')
 
+    def update(self, instance, validated_data):
+        instance.meal = validated_data['new_meal_id']
+        return super(FavouriteMealUpdateSerializer, self).update(instance, validated_data)
+
     class Meta:
         model = FavouriteMeal
         fields = ['id', 'new_meal_id']
