@@ -4,7 +4,7 @@ import operator
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models, DatabaseError
 
-from rest_framework import generics, status, exceptions, filters
+from rest_framework import generics, status, exceptions
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.response import Response
@@ -14,11 +14,45 @@ from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSeria
     MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
     FavouriteMealCreateSerializer, FavouriteMealListSerializer, FavouriteMealUpdateSerializer
 from .models import User, Meal, FavouriteMeal
-from .utils import check_required_params, check_optional_params, filter_query_convert, filter_query_to_q
-from .permissions import IsAdminOrModeratorRoleUser, IsAdminOrRegularRoleUser
+from .utils import check_required_params, check_optional_params, filter_query_convert, filter_query_to_q, supported_operations
+from .permissions import IsAdminOrModeratorUser, IsAdminOrRegularUser
 
 
 logger = logging.getLogger('app_log')
+
+
+class ModelsDetailsView(generics.RetrieveAPIView):
+    permission_classes = [IsAuthenticated, ]
+
+    def get(self, request, *args, **kwargs):
+        models_details = {}
+        for model in (Meal(), FavouriteMeal()):
+            model_name = model._meta.model_name.upper()
+            models_details[model_name] = {}
+            for field in (field.attname for field in model._meta.fields):
+                models_details[model_name][field] = []
+                for lookup in model._meta.get_field(field).get_lookups():
+                    if lookup == 'exact':
+                        lookup = ['eq', 'ne']
+                    elif lookup == 'iexact':
+                        lookup = ['ieq', 'ine']
+
+                    if isinstance(lookup, str):
+                        if lookup in supported_operations:
+                            models_details[model_name][field].append(lookup)
+                    elif isinstance(lookup, list):
+                        models_details[model_name][field].extend(lookup)
+
+        models_details['USER'] = {
+            'id': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+            'username': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+            'first_name': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+            'last_name': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+            'role': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+            'country': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
+        }
+
+        return Response(models_details)
 
 
 class UserView(generics.GenericAPIView):
@@ -92,13 +126,14 @@ class UserLoginView(ObtainAuthToken):
 
 class UsersListView(generics.ListAPIView):
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrModeratorRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrModeratorUser]
 
     def get_queryset(self):
+
         roles = [User.REGULAR_USER]
         if self.request.user.role == User.ADMIN:
             roles += [User.MODERATOR, User.ADMIN]
-
+        '''
         query = filter_query_convert(self.request.data.get('query'))
 
         if query:
@@ -120,6 +155,36 @@ class UsersListView(generics.ListAPIView):
             exc = exceptions.APIException(exc.args[0])
             exc.status_code = status.HTTP_400_BAD_REQUEST
             raise exc
+        return users
+
+        '''
+        list_errors = list()
+        users = None
+        if self.request.data.get('query'):
+            q = filter_query_to_q(self.request.data.get('query'), User())
+            logger.info(f'UsersListView: user={self.request.user}, query={self.request.data.get("query")}, q={q}')
+            if q:
+                try:
+                    users = User.objects.filter(q)
+                except (TypeError, ValueError, DatabaseError):
+                    list_errors.append('Error while executing query. Please check your input')
+            else:
+                list_errors.append('filter query is invalid')
+
+            if list_errors:
+                exc = exceptions.APIException(*list_errors)
+                exc.status_code = status.HTTP_400_BAD_REQUEST
+                raise exc
+        else:
+            users = User.objects.all()
+
+        if users:
+            users = users.filter(role__in=roles)
+            if not self.request.user.is_superuser:
+                users = users.filter(is_superuser=False, is_staff=False)
+        else:
+            users = User.objects.none()
+
         return users
 
 
@@ -195,10 +260,30 @@ class UserDeleteView(UserView, generics.DestroyAPIView):
 
 class MealListView(generics.ListAPIView):
     serializer_class = MealListSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def get_queryset(self):
-        q = filter_query_to_q(self.request.data.get('query'), 'MEAL')
+        list_errors = list()
+        meals = None
+        if self.request.data.get('query'):
+            q = filter_query_to_q(self.request.data.get('query'), Meal())
+            logger.info(f'MealListView: user={self.request.user}, query={self.request.data.get("query")}, q={q}')
+            if q:
+                try:
+                    meals = Meal.objects.filter(q)
+                except (TypeError, ValueError, DatabaseError):
+                    list_errors.append('Error while executing query. Please check your input')
+
+            else:
+                list_errors.append('filter query is invalid')
+
+            if list_errors:
+                exc = exceptions.APIException(*list_errors)
+                exc.status_code = status.HTTP_400_BAD_REQUEST
+                raise exc
+
+        else:
+            meals = Meal.objects.all()
         '''
         query = filter_query_convert(self.request.data.get('query'))
 
@@ -221,12 +306,21 @@ class MealListView(generics.ListAPIView):
             exc.status_code = status.HTTP_400_BAD_REQUEST
             raise exc
         '''
-        return Meal.objects.filter(q)
+
+        if meals:
+            if self.request.user.role == User.REGULAR_USER:
+                q_public_meals = models.Q(public=True)
+                q_own_private_meals = models.Q(public=False, owner=self.request.user)
+                q_meals = operator.or_(q_public_meals, q_own_private_meals)
+                meals = meals.filter(q_meals)
+        else:
+            meals = Meal.objects.none()
+        return meals
 
 
 class MealCreateView(generics.CreateAPIView):
     serializer_class = MealCreateSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def post(self, request, *args, **kwargs):
         logger.info(f'MealCreateView: user={request.user}, request.data={request.data}')
@@ -256,7 +350,7 @@ class MealCreateView(generics.CreateAPIView):
 
 class MealUpdateView(MealView, generics.UpdateAPIView):
     serializer_class = MealUpdateSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def put(self, request, *args, **kwargs):
         logger.info(f'MealUpdateView: user={request.user}, request.data={request.data}')
@@ -266,7 +360,7 @@ class MealUpdateView(MealView, generics.UpdateAPIView):
 
 
 class MealDeleteView(MealView, generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def delete(self, request, *args, **kwargs):
         logger.info(f'MealDeleteView: user={request.user}, request.data={request.data}')
@@ -277,7 +371,7 @@ class MealDeleteView(MealView, generics.DestroyAPIView):
 
 class FavouriteMealCreateView(generics.CreateAPIView):
     serializer_class = FavouriteMealCreateSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def post(self, request, *args, **kwargs):
         logger.info(f'FavouriteMealCreateView: user={request.user}, request.data={request.data}')
@@ -331,7 +425,7 @@ class FavouriteMealCreateView(generics.CreateAPIView):
 
 
 class FavouriteMealDeleteView(generics.DestroyAPIView):
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def get_object(self):
         logger.info(f'FavouriteMealDeleteView: user={self.request.user}, request.data={self.request.data}')
@@ -360,9 +454,10 @@ class FavouriteMealDeleteView(generics.DestroyAPIView):
 
 class FavouriteMealListView(generics.ListAPIView):
     serializer_class = FavouriteMealListSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def get_queryset(self):
+        '''
         query = filter_query_convert(self.request.data.get('query'))
         if query:
             select = """SELECT favourites.* 
@@ -370,16 +465,15 @@ class FavouriteMealListView(generics.ListAPIView):
                         WHERE meals.id=favourites.meal_id 
                         AND users.id=favourites.user_id
                         AND """ + str(query)
-            if self.request.user.role == User.REGULAR_USER:
-                select += f" AND favourites.user_id={self.request.user.id}"
         else:
             select = """SELECT favourites.* 
                         FROM favourites, meals, users 
                         WHERE meals.id=favourites.meal_id 
                         AND users.id=favourites.user_id
                         """
-            if self.request.user.role == User.REGULAR_USER:
-                select += f" AND favourites.user_id={self.request.user.id}"
+
+        if self.request.user.role == User.REGULAR_USER:
+            select += f" AND favourites.user_id={self.request.user.id}"
 
         logger.info(f'FavouriteMealListView: user={self.request.user}, select={select}')
 
@@ -392,10 +486,39 @@ class FavouriteMealListView(generics.ListAPIView):
             exc.status_code = status.HTTP_400_BAD_REQUEST
             raise exc
 
+        '''
+        list_errors = list()
+        favourites = None
+        if self.request.data.get('query'):
+            q = filter_query_to_q(self.request.data.get('query'), FavouriteMeal())
+            logger.info(f'FavouriteMealListView: user={self.request.user}, query={self.request.data.get("query")}, q={q}')
+            if q:
+                try:
+                    favourites = FavouriteMeal.objects.filter(q)
+                except (TypeError, ValueError, DatabaseError):
+                    list_errors.append('Error while executing query. Please check your input')
+            else:
+                list_errors.append('filter query is invalid')
+
+            if list_errors:
+                exc = exceptions.APIException(*list_errors)
+                exc.status_code = status.HTTP_400_BAD_REQUEST
+                raise exc
+        else:
+            favourites = FavouriteMeal.objects.all()
+
+        if favourites:
+            if self.request.user.role == User.REGULAR_USER:
+                favourites = favourites.filter(user=self.request.user)
+        else:
+            favourites = FavouriteMeal.objects.none()
+
+        return favourites
+
 
 class FavouriteMealUpdateView(generics.UpdateAPIView):
     serializer_class = FavouriteMealUpdateSerializer
-    permission_classes = [IsAuthenticated, IsAdminOrRegularRoleUser]
+    permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def put(self, request, *args, **kwargs):
         logger.info(f'FavouriteMealUpdateView: user={request.user}, request.data={request.data}')

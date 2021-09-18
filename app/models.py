@@ -78,7 +78,7 @@ class Meal(models.Model):
     calories = models.FloatField(default=0.0, blank=True, null=True)
     owner = models.ForeignKey('User', related_name='meals', on_delete=models.CASCADE)
     public = models.BooleanField(default=False)
-    created_date = models.DateTimeField(auto_now_add=True)
+    created_date = models.DateField(auto_now_add=True)
     last_edited = models.DateTimeField(auto_now=True)
 
     def __str__(self):
@@ -111,7 +111,7 @@ class Meal(models.Model):
 class FavouriteMeal(models.Model):
     user = models.ForeignKey('User', related_name='favourites', on_delete=models.CASCADE)
     meal = models.ForeignKey('Meal', related_name='favorited_users', on_delete=models.CASCADE)
-    created = models.DateTimeField(auto_now_add=True)
+    created_date = models.DateField(auto_now_add=True)
     last_edited = models.DateTimeField(auto_now=True)
 
     def __str__(self):

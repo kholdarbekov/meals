@@ -1,7 +1,8 @@
 from django.urls import path
 from .views import UsersListView, UserLoginView, UserRegisterView, UserUpdateView, UserDeleteView, UserPasswordUpdateView, \
     MealListView, MealCreateView, MealUpdateView, MealDeleteView, \
-    FavouriteMealCreateView, FavouriteMealDeleteView, FavouriteMealListView, FavouriteMealUpdateView
+    FavouriteMealCreateView, FavouriteMealDeleteView, FavouriteMealListView, FavouriteMealUpdateView, \
+    ModelsDetailsView
 
 urlpatterns = [
     path('user/login', UserLoginView.as_view(), name='user_login'),
@@ -20,4 +21,6 @@ urlpatterns = [
     path('favourite/delete', FavouriteMealDeleteView.as_view(), name='favourite_delete'),
     path('favourite/update', FavouriteMealUpdateView.as_view(), name='favourite_update'),
     path('favourites/', FavouriteMealListView.as_view(), name='favourites_list'),
+
+    path('models-fields-lookups/', ModelsDetailsView.as_view(), name='models_details'),
 ]

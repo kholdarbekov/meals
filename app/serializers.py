@@ -1,8 +1,3 @@
-import pycountry
-from django.contrib.auth.hashers import make_password, check_password
-from django.core.exceptions import ObjectDoesNotExist
-from django.core.validators import MinValueValidator
-
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
