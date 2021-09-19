@@ -17,18 +17,11 @@ supported_operations = {
     'eq', 'ieq', 'ne', 'ine', 'gt', 'gte', 'lt', 'lte', 'in', 'range', 'isnull', 'date'
 }
 
-mappings = {
-    ' eq ': ' = ',
-    ' ne ': ' != ',
-    ' gt ': ' > ',
-    ' lt ': ' < ',
-    ' gte ': ' >= ',
-    ' lte ': ' <= ',
-}
-
-filter_mappings = {
+lookup_mappings = {
     'eq': 'exact',
+    'ieq': 'iexact',
     'ne': 'exact',  # use as ~Q()
+    'ine': 'iexact',  # use as ~Q()
 }
 
 models_remote_fields = {
@@ -115,26 +108,6 @@ def custom_exception_handler(exc, context):
     return response
 
 
-def filter_query_convert(query: str) -> Optional[str]:
-    if query and isinstance(query, str):
-        pattern_drop = re.compile(r"drop\s+table\s*\w*")
-        pattern_alter = re.compile(r"alter\s+table\s+\w+")
-        pattern_delete = re.compile(r"delete\s+from\s+\w+")
-        pattern_update = re.compile(r"update\s+\w+\s+set\s+\w+")
-        pattern_insert = re.compile(r"insert\s+into\s+\w+")
-        pattern_select = re.compile(r"select\s+\w+\s+from\s+")
-        query_lower = query.lower()
-        if '--' in query_lower or '/*' in query_lower or \
-                pattern_drop.match(query_lower) or pattern_alter.match(query_lower) or \
-                pattern_update.match(query_lower) or pattern_insert.match(query_lower) or \
-                pattern_delete.match(query_lower) or pattern_select.match(query_lower):
-            return None
-        for expression, operation in mappings.items():
-            query = query.replace(expression, operation)
-
-    return query
-
-
 def model_fields_to_list(model: Model) -> list:
     if model._meta.model_name.upper() == 'USER':
         fields_list = ['id', 'username', 'first_name', 'last_name', 'last_name', 'role', 'country']
@@ -212,7 +185,7 @@ def string_to_q(s: str, model: Model) -> Optional[Q]:
     if operation_original not in supported_operations:
         return None
 
-    operation = filter_mappings[operation_original] if operation_original in filter_mappings else operation_original
+    operation = lookup_mappings[operation_original] if operation_original in lookup_mappings else operation_original
 
     model_fields = model_fields_to_list(type(model)())
 
@@ -265,7 +238,7 @@ def string_to_q(s: str, model: Model) -> Optional[Q]:
     q_params = {f'{field_name}__{operation}': value}
 
     q = Q(**q_params)
-    if operation_original == 'ne':
+    if operation_original in ('ne', 'ine'):
         q = ~q
     return q
 

@@ -14,7 +14,7 @@ from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSeria
     MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
     FavouriteMealCreateSerializer, FavouriteMealListSerializer, FavouriteMealUpdateSerializer
 from .models import User, Meal, FavouriteMeal
-from .utils import check_required_params, check_optional_params, filter_query_convert, filter_query_to_q, supported_operations
+from .utils import check_required_params, check_optional_params, filter_query_to_q, supported_operations
 from .permissions import IsAdminOrModeratorUser, IsAdminOrRegularUser
 
 
@@ -129,37 +129,13 @@ class UsersListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrModeratorUser]
 
     def get_queryset(self):
+        list_errors = list()
+        users = None
 
         roles = [User.REGULAR_USER]
         if self.request.user.role == User.ADMIN:
             roles += [User.MODERATOR, User.ADMIN]
-        '''
-        query = filter_query_convert(self.request.data.get('query'))
 
-        if query:
-            select = "SELECT * FROM users WHERE " + str(query)
-        else:
-            select = "SELECT * FROM users WHERE 1=1 "
-
-        select += f" AND role in {tuple(roles) if len(roles) > 1 else f'({roles[0]})'}"
-
-        if not self.request.user.is_superuser:
-            select += " AND is_superuser = False AND is_staff = False"
-
-        logger.info(f'UsersListView: user={self.request.user}, select={select}')
-
-        try:
-            users = User.objects.raw(select)
-            _ = bool(users)
-        except DatabaseError as exc:
-            exc = exceptions.APIException(exc.args[0])
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-        return users
-
-        '''
-        list_errors = list()
-        users = None
         if self.request.data.get('query'):
             q = filter_query_to_q(self.request.data.get('query'), User())
             logger.info(f'UsersListView: user={self.request.user}, query={self.request.data.get("query")}, q={q}')
@@ -297,28 +273,6 @@ class MealListView(generics.ListAPIView):
 
         else:
             meals = Meal.objects.all()
-        '''
-        query = filter_query_convert(self.request.data.get('query'))
-
-        if query:
-            select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id AND " + str(query)
-        else:
-            select = f"SELECT meals.* FROM meals, users WHERE meals.owner_id=users.id"
-
-        if self.request.user.role == User.REGULAR_USER:
-            select += " AND (meals.public=True OR (meals.public=False AND meals.owner_id={}))".format(self.request.user.id)
-
-        logger.info(f'MealListView: user={self.request.user}, select={select}')
-        
-        try:
-            meals = Meal.objects.raw(select)
-            _ = bool(meals)
-            return meals
-        except DatabaseError as exc:
-            exc = exceptions.APIException(exc.args[0])
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-        '''
 
         if meals:
             if self.request.user.role == User.REGULAR_USER:
@@ -470,36 +424,6 @@ class FavouriteMealListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrRegularUser]
 
     def get_queryset(self):
-        '''
-        query = filter_query_convert(self.request.data.get('query'))
-        if query:
-            select = """SELECT favourites.* 
-                        FROM favourites, meals, users 
-                        WHERE meals.id=favourites.meal_id 
-                        AND users.id=favourites.user_id
-                        AND """ + str(query)
-        else:
-            select = """SELECT favourites.* 
-                        FROM favourites, meals, users 
-                        WHERE meals.id=favourites.meal_id 
-                        AND users.id=favourites.user_id
-                        """
-
-        if self.request.user.role == User.REGULAR_USER:
-            select += f" AND favourites.user_id={self.request.user.id}"
-
-        logger.info(f'FavouriteMealListView: user={self.request.user}, select={select}')
-
-        try:
-            favourites = FavouriteMeal.objects.raw(select)
-            _ = bool(favourites)
-            return favourites
-        except DatabaseError as exc:
-            exc = exceptions.APIException(exc.args[0])
-            exc.status_code = status.HTTP_400_BAD_REQUEST
-            raise exc
-
-        '''
         list_errors = list()
         favourites = None
         if self.request.data.get('query'):
