@@ -80,16 +80,14 @@ def check_required_params(required_params, request_data):
     # allow 0 (zero) but not allow '' (empty string)
     m = map(lambda x: x in request_data and request_data.get(x) is not None and len(str(request_data.get(x))), required_params)
     if not all(m):
-        exc = exceptions.APIException(f'request must contain {required_params}')
-        exc.status_code = status.HTTP_400_BAD_REQUEST
+        exc = exceptions.ValidationError(f'request must contain {required_params}')
         raise exc
 
 
 def check_optional_params(optional_params, request_data):
     m = map(lambda x: x in request_data and request_data.get(x), optional_params)
     if not any(m):
-        exc = exceptions.APIException(f'request must contain at least on of {optional_params} parameters')
-        exc.status_code = status.HTTP_400_BAD_REQUEST
+        exc = exceptions.ValidationError(f'request must contain at least on of {optional_params} parameters')
         raise exc
 
 
@@ -124,7 +122,7 @@ def custom_exception_handler(exc, context):
 
 def model_fields_to_list(model: Model) -> list:
     if model._meta.model_name.upper() == 'USER':
-        fields_list = ['id', 'username', 'first_name', 'last_name', 'last_name', 'role', 'country']
+        fields_list = ['username', 'first_name', 'last_name', 'last_name', 'role', 'country']
     else:
         fields_list = [field.attname for field in model._meta.fields]
     return fields_list
@@ -174,6 +172,12 @@ def string_to_list(s: str) -> Optional[list or str]:
     :return: list
     '''
     if not s:
+        return None
+
+    if len(s) < 2:
+        return None
+
+    if s[0] != '[' or s[-1] != ']':
         return None
 
     s = s[1:-1]  # remove [] brackets

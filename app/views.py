@@ -44,7 +44,6 @@ class ModelsDetailsView(generics.RetrieveAPIView):
                         models_details[model_name][field].extend(lookup)
 
         models_details['USER'] = {
-            'id': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
             'username': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
             'first_name': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
             'last_name': ["eq", "ne", "ieq", "ine", "gt", "gte", "lt", "lte", "in", "range", "isnull"],
