@@ -136,6 +136,15 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['username', 'first_name', 'last_name', 'role', 'country']
 
 
+class UserDetailsSerializer(serializers.ModelSerializer):
+    meals = MealListSerializer(many=True)
+    favourites = FavouriteMealListSerializer(many=True)
+
+    class Meta:
+        model = User
+        fields = ['username', 'first_name', 'last_name', 'role', 'country', 'meals', 'favourites']
+
+
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     first_name = serializers.CharField(required=False)

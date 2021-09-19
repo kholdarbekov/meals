@@ -329,10 +329,13 @@ def filter_query_to_q(query: str, model: Model) -> Optional[list]:
             q = q_list[i]
             if isinstance(q, str):
                 if q == AND:
-                    if isinstance(q_list[i-1], Q) and isinstance(q_list[i+1], Q):
-                        q_list[i-1:i+2] = [operator.and_(q_list[i-1], q_list[i+1])]
-                        i = 0
-                        continue
+                    try:
+                        if isinstance(q_list[i-1], Q) and isinstance(q_list[i+1], Q):
+                            q_list[i-1:i+2] = [operator.and_(q_list[i-1], q_list[i+1])]
+                            i = 0
+                            continue
+                    except IndexError:
+                        return None
             i += 1
 
         i = 0
@@ -341,12 +344,18 @@ def filter_query_to_q(query: str, model: Model) -> Optional[list]:
             q = q_list[i]
             if isinstance(q, str):
                 if q == OR:
-                    if isinstance(q_list[i - 1], Q) and isinstance(q_list[i + 1], Q):
-                        q_list[i - 1:i + 2] = [operator.or_(q_list[i - 1], q_list[i + 1])]
-                        i = 0
-                        continue
+                    try:
+                        if isinstance(q_list[i - 1], Q) and isinstance(q_list[i + 1], Q):
+                            q_list[i - 1:i + 2] = [operator.or_(q_list[i - 1], q_list[i + 1])]
+                            i = 0
+                            continue
+                    except IndexError:
+                        return None
             i += 1
 
         result_q_object = q_list[0]
+    else:
+        if isinstance(q_list, list):
+            result_q_object = string_to_q(query, type(model)())
 
     return result_q_object

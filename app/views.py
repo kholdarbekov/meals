@@ -10,7 +10,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
-from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSerializer, UserPasswordUpdateSerializer, \
+from .serializers import UserSerializer, UserRegisterSerializer, UserUpdateSerializer, UserPasswordUpdateSerializer, UserDetailsSerializer, \
     MealListSerializer, MealCreateSerializer, MealUpdateSerializer, \
     FavouriteMealCreateSerializer, FavouriteMealListSerializer, FavouriteMealUpdateSerializer
 from .models import User, Meal, FavouriteMeal
@@ -186,6 +186,19 @@ class UsersListView(generics.ListAPIView):
             users = User.objects.none()
 
         return users
+
+
+class UserDetailsView(UserView, generics.RetrieveAPIView):
+    serializer_class = UserDetailsSerializer
+    permission_classes = [IsAuthenticated, ]
+
+    def get(self, request, *args, **kwargs):
+        logger.info(f'UserRetrieveView: user={request.user}, request.data={request.data}')
+        if request.user.role != User.REGULAR_USER:
+            required_params = ('username',)
+            check_required_params(required_params, request.data)
+
+        return super(UserDetailsView, self).get(request, *args, **kwargs)
 
 
 class UserRegisterView(generics.CreateAPIView):
