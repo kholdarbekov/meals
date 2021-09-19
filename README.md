@@ -23,7 +23,7 @@ Project is written with Django 3.2 using DRF
 
 * API provides filter and pagination capabilities for all endpoints that return a list of elements
 
-* Filtering allows using parenthesis for defining operations precedence and use any combination of the available fields. The supported operations are: **or, and, eq (equals), ieq (case-insensitive equals), ne (not equals), ine (case-insensitive not equals), gt (greater than), gte (greater than or equal to), lt (lower than), lte (lower than or equal to), in (is in list[] of specified values), range (between specified range [start, end]), isnull (is value null, True or False), date (in case of datetime field compare only date)**
+* Filtering allows using parenthesis for defining operations precedence and use any combination of the available fields. The supported operations are: **or**, **and**, **eq** (equals), **ieq** (case-insensitive equals), **ne** (not equals), **ine** (case-insensitive not equals), **gt** (greater than), **gte** (greater than or equal to), **lt** (lower than), **lte** (lower than or equal to), **in** (is in list[] of specified values), **range** (between specified range [start, end]), **isnull** (is value null, True or False), **date** (in case of datetime field compare only date)
 
 # Usage Notes
 
