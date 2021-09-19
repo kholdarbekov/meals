@@ -1,6 +1,7 @@
 from django.contrib.auth.base_user import BaseUserManager
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from django.utils.translation import gettext_lazy as _
@@ -75,7 +76,7 @@ class Meal(models.Model):
     )
     title = models.CharField(blank=False, null=False, max_length=256)
     type = models.PositiveSmallIntegerField(choices=MEAL_TYPE_CHOICES, default=MEAL_TYPE_CHOICES[0][0])
-    calories = models.FloatField(default=0.0, blank=True, null=True)
+    calories = models.FloatField(default=0.0, blank=True, null=True, validators=[MinValueValidator(0.0)])
     owner = models.ForeignKey('User', related_name='meals', on_delete=models.CASCADE)
     public = models.BooleanField(default=False)
     created_date = models.DateField(auto_now_add=True)

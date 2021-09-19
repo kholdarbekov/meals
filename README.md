@@ -31,11 +31,11 @@ User roles are: Regular, Moderator, and Admin with 1, 2, and 3 as numerical repr
 
 Meal types are: Breakfast, Lunch, Dinner, Snack with 1, 2, 3, and 4 as numerical representations respectively.
 
-### Export environment variables
+### Run the project
 
 Before running project execute `enviroment_values.sh`. It contains DJANGO_SECRET_KEY, DATABASE credentials, and DJANGO_SETTINGS_MODULE
 
-    $ ./enviroment_values.sh
+    $ source ./enviroment_values.sh
     
 And then install project dependencies:
 

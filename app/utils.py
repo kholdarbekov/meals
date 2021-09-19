@@ -55,8 +55,13 @@ def get_calories_from_api(food=''):
         data = response.json()
         try:
             calories = data['foods'][0]['nf_calories']
-        except KeyError as e:
+        except KeyError:
             calories = 0
+
+        if not isinstance(calories, (float, int)):
+            calories = 0
+
+        calories = max(0, calories)
     else:
         calories = 0
 
@@ -95,12 +100,20 @@ def custom_exception_handler(exc, context):
     if response is not None:
         details = dict()
         details['details'] = list()
-        for data in response.data.values():
-            if isinstance(data, (list, tuple)):
-                for d in data:
-                    details['details'].append(d)
-            else:
-                details['details'].append(data)
+        if isinstance(response.data, dict):
+            for data in response.data.values():
+                if isinstance(data, (list, tuple)):
+                    for d in data:
+                        details['details'].append(d)
+                else:
+                    details['details'].append(data)
+        elif isinstance(response.data, (list, tuple)):
+            for data in response.data:
+                if isinstance(data, (list, tuple)):
+                    for d in data:
+                        details['details'].append(d)
+                else:
+                    details['details'].append(data)
         response.data = details
 
     errors_logger.error('Error', exc_info=exc)

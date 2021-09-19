@@ -217,6 +217,13 @@ class UserUpdateView(UserView, generics.UpdateAPIView):
             required_params = ('username',)
             check_required_params(required_params, request.data)
 
+        if request.user.role != User.ADMIN:
+            try:
+                # Only Admin can change user's role
+                request.data.pop('role', None)
+            except AttributeError:
+                pass
+
         optional_params = ('first_name', 'last_name', 'country',)
         check_optional_params(optional_params, request.data)
         return super(UserUpdateView, self).put(request, *args, **kwargs)
@@ -293,6 +300,9 @@ class MealCreateView(generics.CreateAPIView):
         logger.info(f'MealCreateView: user={request.user}, request.data={request.data}')
         required_params = ('title', 'type')
         check_required_params(required_params, request.data)
+        if request.data.get('calories'):
+            if float(request.data['calories']) < 0:
+                raise exceptions.ValidationError('calories must be positive')
         return super(MealCreateView, self).post(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
@@ -323,6 +333,9 @@ class MealUpdateView(MealView, generics.UpdateAPIView):
         logger.info(f'MealUpdateView: user={request.user}, request.data={request.data}')
         required_params = ('id',)
         check_required_params(required_params, request.data)
+        if request.data.get('calories'):
+            if float(request.data['calories']) < 0:
+                raise exceptions.ValidationError('calories must be positive')
         return super(MealUpdateView, self).put(request, *args, **kwargs)
 
 

@@ -46,18 +46,15 @@ class MealCreateSerializer(serializers.ModelSerializer):
             if not isinstance(calories, (int, float)):
                 msg = _('Meal calories must be numeric!')
                 raise serializers.ValidationError(msg, code='validation')
+            if calories < 0:
+                msg = _('Meal calories must be positive number!')
+                raise serializers.ValidationError(msg, code='validation')
         else:
             # get calories from API
             calories = get_calories_from_api(attrs.get('title'))
 
         attrs['calories'] = calories
-        '''
-        try:
-            attrs['owner'] = self.context['request'].user
-        except (ObjectDoesNotExist, AttributeError, KeyError):
-            msg = _('Meal owner not found!')
-            raise serializers.ValidationError(msg, code='validation')
-        '''
+
         return attrs
 
     class Meta:
@@ -147,8 +144,8 @@ class UserDetailsSerializer(serializers.ModelSerializer):
 
 class UserRegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
-    first_name = serializers.CharField(required=False)
-    last_name = serializers.CharField(required=False)
+    first_name = serializers.CharField(required=False, error_messages={'blank': 'first_name may not be blank'})
+    last_name = serializers.CharField(required=False, error_messages={'blank': 'last_name may not be blank'})
 
     def create(self, validated_data):
         user = User.objects.create_user(
