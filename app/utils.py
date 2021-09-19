@@ -77,7 +77,8 @@ def get_country(country_code: str = ''):
 
 
 def check_required_params(required_params, request_data):
-    m = map(lambda x: x in request_data and request_data.get(x), required_params)
+    # allow 0 (zero) but not allow '' (empty string)
+    m = map(lambda x: x in request_data and request_data.get(x) is not None and len(str(request_data.get(x))), required_params)
     if not all(m):
         exc = exceptions.APIException(f'request must contain {required_params}')
         exc.status_code = status.HTTP_400_BAD_REQUEST
@@ -256,7 +257,7 @@ def string_to_q(s: str, model: Model) -> Optional[Q]:
     return q
 
 
-def filter_query_to_q(query: str, model: Model) -> Optional[list]:
+def filter_query_to_q(query: str, model: Model) -> Optional[Q]:
     q_list = []
     result_q_object = None
     stack = []

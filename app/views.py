@@ -75,8 +75,7 @@ class UserView(generics.GenericAPIView):
             error_message.extend(e.args)
 
         if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
+            exc = exceptions.ValidationError(*error_message)
             raise exc
 
         return user
@@ -102,8 +101,7 @@ class MealView(generics.GenericAPIView):
             error_message.extend(e.args)
 
         if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
+            exc = exceptions.ValidationError(*error_message)
             raise exc
 
         return meal
@@ -148,8 +146,7 @@ class UsersListView(generics.ListAPIView):
                 list_errors.append('filter query is invalid')
 
             if list_errors:
-                exc = exceptions.APIException(*list_errors)
-                exc.status_code = status.HTTP_400_BAD_REQUEST
+                exc = exceptions.ValidationError(*list_errors)
                 raise exc
         else:
             users = User.objects.all()
@@ -274,8 +271,7 @@ class MealListView(generics.ListAPIView):
                 list_errors.append('filter query is invalid')
 
             if list_errors:
-                exc = exceptions.APIException(*list_errors)
-                exc.status_code = status.HTTP_400_BAD_REQUEST
+                exc = exceptions.ValidationError(*list_errors)
                 raise exc
 
         else:
@@ -314,8 +310,7 @@ class MealCreateView(generics.CreateAPIView):
                 user = User.objects.get(username=request.data['user'], is_superuser=False, is_staff=False)
                 kwargs['owner'] = user
             except ObjectDoesNotExist:
-                exc = exceptions.APIException(f'User not found with username={request.data["user"]}')
-                exc.status_code = status.HTTP_400_BAD_REQUEST
+                exc = exceptions.ValidationError(f'User not found with username={request.data["user"]}')
                 raise exc
         self.perform_create(serializer, **kwargs)
         headers = self.get_success_headers(serializer.data)
@@ -390,8 +385,7 @@ class FavouriteMealCreateView(generics.CreateAPIView):
                 error_message.append('Meal is already in favourite list of this user')
 
         if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
+            exc = exceptions.ValidationError(*error_message)
             raise exc
 
         try:
@@ -425,8 +419,7 @@ class FavouriteMealDeleteView(generics.DestroyAPIView):
             error_message.extend(e.args)
 
         if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
+            exc = exceptions.ValidationError(*error_message)
             raise exc
 
         return favourite
@@ -451,8 +444,7 @@ class FavouriteMealListView(generics.ListAPIView):
                 list_errors.append('filter query is invalid')
 
             if list_errors:
-                exc = exceptions.APIException(*list_errors)
-                exc.status_code = status.HTTP_400_BAD_REQUEST
+                exc = exceptions.ValidationError(*list_errors)
                 raise exc
         else:
             favourites = FavouriteMeal.objects.all()
@@ -525,8 +517,7 @@ class FavouriteMealUpdateView(generics.UpdateAPIView):
             pass
 
         if error_message:
-            exc = exceptions.APIException(*error_message)
-            exc.status_code = status.HTTP_400_BAD_REQUEST
+            exc = exceptions.ValidationError(*error_message)
             raise exc
 
         return favourite
